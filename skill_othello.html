@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>能力付きオセロ（オフライン）</title>
+  <style>
+    :root { --cell: 44px; --gap: 6px; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+      margin: 0; padding: 14px 14px 24px;
+      background: #0f172a; color: #e2e8f0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    h1 { font-size: 18px; margin: 0 0 10px; font-weight: 700; }
+    .top {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      max-width: 520px;
+      margin: 0 auto;
+    }
+    .panel {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 14px;
+      padding: 12px;
+      backdrop-filter: blur(6px);
+    }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .status {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+    }
+    .turnBadge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      font-weight: 700;
+    }
+    .disc {
+      width: 18px; height: 18px;
+      border-radius: 999px;
+      background: #000;
+      box-shadow: 0 0 0 2px rgba(255,255,255,0.20) inset;
+    }
+    .disc.white { background: #fff; }
+    .scores {
+      display: flex; gap: 10px; align-items: center; justify-content: flex-end;
+      font-weight: 700;
+    }
+    .scores span { opacity: 0.95; }
+    button {
+      appearance: none;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.10);
+      color: #e2e8f0;
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    button:active { transform: translateY(1px); }
+    button.primary { background: rgba(99, 102, 241, 0.28); border-color: rgba(99, 102, 241, 0.55); }
+    button.danger { background: rgba(239, 68, 68, 0.20); border-color: rgba(239, 68, 68, 0.55); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .hint { font-size: 13px; opacity: 0.9; line-height: 1.45; }
+    .boardWrap { display: grid; place-items: center; }
+    .board {
+      display: grid;
+      grid-template-columns: repeat(8, var(--cell));
+      grid-template-rows: repeat(8, var(--cell));
+      gap: var(--gap);
+      padding: 10px;
+      border-radius: 16px;
+      background: rgba(34, 197, 94, 0.14);
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .cell {
+      width: var(--cell); height: var(--cell);
+      border-radius: 12px;
+      background: rgba(16, 185, 129, 0.25);
+      border: 1px solid rgba(255,255,255,0.10);
+      display: grid;
+      place-items: center;
+      position: relative;
+    }
+    .cell.valid::after {
+      content: "";
+      width: 10px; height: 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.55);
+      position: absolute;
+      bottom: 6px; right: 6px;
+    }
+    .stone {
+      width: calc(var(--cell) - 14px);
+      height: calc(var(--cell) - 14px);
+      border-radius: 999px;
+      background: #0b0b0b;
+      box-shadow:
+        0 10px 18px rgba(0,0,0,0.35),
+        0 0 0 2px rgba(255,255,255,0.18) inset;
+    }
+    .stone.white { background: #f8fafc; }
+    .footer {
+      max-width: 520px; margin: 0 auto;
+      display: grid; gap: 10px;
+    }
+    .modeLine {
+      font-size: 13px; opacity: 0.95;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.10);
+    }
+    .small { font-size: 12px; opacity: 0.85; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <h1>能力付きオセロ（オフライン・iPhone1台）✨</h1>
+
+    <div class="panel status">
+      <div class="turnBadge" id="turnBadge">
+        <span class="disc" id="turnDisc"></span>
+        <span id="turnText">黒の番</span>
+      </div>
+      <div class="scores" id="scores">
+        <span>● <span id="blackCount">2</span></span>
+        <span>○ <span id="whiteCount">2</span></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <button class="primary" id="btnPass" title="置けない時に使います">パス</button>
+        <button id="btnNew" class="danger">新しい対局</button>
+      </div>
+      <div class="hint" style="margin-top:10px">
+        ・交代プレイです（黒→白→黒…）<br/>
+        ・能力は <b>各プレイヤー1回</b> だけ使えます🔥<br/>
+        ・能力使用中は、指示どおり盤面をタップしてください😊
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <button id="skillRotate">🔄 回転（1回）</button>
+        <button id="skillFreeze">🧊 凍結（1回）</button>
+        <button id="skillBomb">💣 爆破（1回）</button>
+      </div>
+      <div class="modeLine" id="modeLine" style="margin-top:10px;">
+        通常モード：置けるマスにタップしてね
+      </div>
+      <div class="small" id="skillInfo" style="margin-top:8px;">
+        黒：回転/凍結/爆破 = 〇/〇/〇　｜　白：回転/凍結/爆破 = 〇/〇/〇
+      </div>
+    </div>
+
+    <div class="panel boardWrap">
+      <div class="board" id="board"></div>
+    </div>
+
+    <div class="footer">
+      <div class="panel hint">
+        💡 便利：Safariの共有 →「ホーム画面に追加」で"アプリ化"できます📲✨
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const EMPTY = 0, BLACK = 1, WHITE = 2;
+
+  // 状態
+  let board = makeInitialBoard();
+  let turn = BLACK;
+  let mode = "normal"; // normal | bombPick
+  let freezePending = { [BLACK]: 0, [WHITE]: 0 }; // 1なら次の相手手番をスキップ
+  let used = {
+    [BLACK]: { rotate:false, freeze:false, bomb:false },
+    [WHITE]: { rotate:false, freeze:false, bomb:false },
+  };
+
+  // DOM
+  const elBoard = document.getElementById("board");
+  const elTurnText = document.getElementById("turnText");
+  const elTurnDisc = document.getElementById("turnDisc");
+  const elBlackCount = document.getElementById("blackCount");
+  const elWhiteCount = document.getElementById("whiteCount");
+  const elModeLine = document.getElementById("modeLine");
+  const elSkillInfo = document.getElementById("skillInfo");
+
+  const btnPass = document.getElementById("btnPass");
+  const btnNew = document.getElementById("btnNew");
+
+  const btnRotate = document.getElementById("skillRotate");
+  const btnFreeze = document.getElementById("skillFreeze");
+  const btnBomb = document.getElementById("skillBomb");
+
+  // 初期描画
+  render();
+
+  // イベント
+  btnNew.addEventListener("click", () => {
+    if (!confirm("新しい対局を始めますか？")) return;
+    board = makeInitialBoard();
+    turn = BLACK;
+    mode = "normal";
+    freezePending[BLACK] = 0;
+    freezePending[WHITE] = 0;
+    used[BLACK] = { rotate:false, freeze:false, bomb:false };
+    used[WHITE] = { rotate:false, freeze:false, bomb:false };
+    render();
+  });
+
+  btnPass.addEventListener("click", () => {
+    // 置ける手があるのにパスはできるけど、軽く確認
+    const moves = getValidMoves(board, turn);
+    if (moves.length > 0) {
+      const ok = confirm("置けるマスがありますがパスしますか？");
+      if (!ok) return;
+    }
+    nextTurn();
+  });
+
+  btnRotate.addEventListener("click", () => {
+    if (used[turn].rotate) return;
+    used[turn].rotate = true;
+    board = rotateBoard90(board);
+    mode = "normal";
+    afterActionMaybeAutoPass();
+    render("🔄 回転しました！");
+  });
+
+  btnFreeze.addEventListener("click", () => {
+    if (used[turn].freeze) return;
+    used[turn].freeze = true;
+    const opp = opponent(turn);
+    freezePending[opp] = 1; // 相手の次の手番をスキップ
+    mode = "normal";
+    render("🧊 凍結！相手の次の番をスキップします");
+  });
+
+  btnBomb.addEventListener("click", () => {
+    if (used[turn].bomb) return;
+    used[turn].bomb = true;
+    mode = "bombPick";
+    render("💣 爆破モード：消したいマスを1つタップしてね");
+  });
+
+  // 盤面タップ
+  elBoard.addEventListener("click", (e) => {
+    const cell = e.target.closest(".cell");
+    if (!cell) return;
+    const r = Number(cell.dataset.r);
+    const c = Number(cell.dataset.c);
+
+    if (mode === "bombPick") {
+      board[r][c] = EMPTY; // 何があっても消す（空にする）
+      mode = "normal";
+      afterActionMaybeAutoPass();
+      render("💣 爆破！そのマスを空にしました");
+      return;
+    }
+
+    // 通常の着手
+    const flips = getFlips(board, r, c, turn);
+    if (flips.length === 0) return; // 置けない場所
+    board[r][c] = turn;
+    for (const [fr, fc] of flips) board[fr][fc] = turn;
+
+    nextTurn();
+  });
+
+  // ---- ゲームロジック ----
+
+  function makeInitialBoard() {
+    const b = Array.from({length:8}, () => Array(8).fill(EMPTY));
+    b[3][3] = WHITE; b[3][4] = BLACK;
+    b[4][3] = BLACK; b[4][4] = WHITE;
+    return b;
+  }
+
+  function opponent(p) { return p === BLACK ? WHITE : BLACK; }
+
+  function inBounds(r,c){ return r>=0 && r<8 && c>=0 && c<8; }
+
+  function getFlips(b, r, c, p) {
+    if (!inBounds(r,c) || b[r][c] !== EMPTY) return [];
+    const opp = opponent(p);
+    const dirs = [
+      [-1,-1],[-1,0],[-1,1],
+      [0,-1],        [0,1],
+      [1,-1],[1,0],[1,1],
+    ];
+    const all = [];
+    for (const [dr,dc] of dirs) {
+      let rr = r+dr, cc = c+dc;
+      const line = [];
+      while (inBounds(rr,cc) && b[rr][cc] === opp) {
+        line.push([rr,cc]);
+        rr += dr; cc += dc;
+      }
+      if (line.length > 0 && inBounds(rr,cc) && b[rr][cc] === p) {
+        all.push(...line);
+      }
+    }
+    return all;
+  }
+
+  function getValidMoves(b, p) {
+    const moves = [];
+    for (let r=0;r<8;r++){
+      for (let c=0;c<8;c++){
+        if (getFlips(b,r,c,p).length>0) moves.push([r,c]);
+      }
+    }
+    return moves;
+  }
+
+  function countStones(b) {
+    let black=0, white=0;
+    for (let r=0;r<8;r++){
+      for (let c=0;c<8;c++){
+        if (b[r][c]===BLACK) black++;
+        else if (b[r][c]===WHITE) white++;
+      }
+    }
+    return {black, white};
+  }
+
+  function rotateBoard90(b) {
+    // new[r][c] = old[7-c][r]
+    const nb = Array.from({length:8}, () => Array(8).fill(EMPTY));
+    for (let r=0;r<8;r++){
+      for (let c=0;c<8;c++){
+        nb[r][c] = b[7-c][r];
+      }
+    }
+    return nb;
+  }
+
+  function nextTurn() {
+    mode = "normal";
+
+    // 手番交代
+    turn = opponent(turn);
+
+    // 凍結チェック：凍結されていたらその手番をスキップ
+    if (freezePending[turn] === 1) {
+      freezePending[turn] = 0;
+      // 表示だけ出して、さらに交代
+      const frozenPlayer = turn;
+      turn = opponent(turn);
+      render(`🧊 ${frozenPlayer===BLACK?"黒":"白"}は凍結でスキップ！`);
+      // さらにパス判定や終局判定
+      afterActionMaybeAutoPass(true);
+      return;
+    }
+
+    afterActionMaybeAutoPass();
+    render();
+  }
+
+  function afterActionMaybeAutoPass(fromFreezeMessage=false) {
+    // 終局チェック：両者とも置けないなら終了
+    const movesNow = getValidMoves(board, turn);
+    const movesOpp = getValidMoves(board, opponent(turn));
+
+    if (movesNow.length === 0 && movesOpp.length === 0) {
+      const {black, white} = countStones(board);
+      const result =
+        black === white ? "引き分け！😳" :
+        black > white ? "黒の勝ち！🎉" : "白の勝ち！🎉";
+      setModeLine(`終局：●${black} - ○${white} ／ ${result}`);
+      return;
+    }
+
+    // 片方が置けないなら自動パス（待ち時間向けにテンポ重視）
+    if (movesNow.length === 0 && movesOpp.length > 0) {
+      const skipped = turn;
+      turn = opponent(turn);
+      if (!fromFreezeMessage) {
+        setModeLine(`自動パス：${skipped===BLACK?"黒":"白"}は置けないのでスキップ`);
+      }
+    } else {
+      if (!fromFreezeMessage) setModeLine("通常モード：置けるマスにタップしてね");
+    }
+  }
+
+  function setModeLine(text) {
+    elModeLine.textContent = text;
+  }
+
+  // ---- UI描画 ----
+
+  function render(message=null) {
+    // ステータス
+    elTurnText.textContent = (turn === BLACK ? "黒の番" : "白の番");
+    elTurnDisc.className = "disc" + (turn === WHITE ? " white" : "");
+    const {black, white} = countStones(board);
+    elBlackCount.textContent = String(black);
+    elWhiteCount.textContent = String(white);
+
+    // スキルボタン有効/無効
+    btnRotate.disabled = used[turn].rotate;
+    btnFreeze.disabled = used[turn].freeze;
+    btnBomb.disabled = used[turn].bomb;
+
+    // モード表示
+    if (mode === "bombPick") {
+      setModeLine("💣 爆破モード：消したいマスを1つタップしてね");
+    } else if (message) {
+      setModeLine(message);
+    } // それ以外は afterActionMaybeAutoPass が設定
+
+    // スキル残数表示
+    elSkillInfo.textContent =
+      `黒：回転/凍結/爆破 = ${mark(!used[BLACK].rotate)}/${mark(!used[BLACK].freeze)}/${mark(!used[BLACK].bomb)}　｜　` +
+      `白：回転/凍結/爆破 = ${mark(!used[WHITE].rotate)}/${mark(!used[WHITE].freeze)}/${mark(!used[WHITE].bomb)}`;
+
+    // 盤面
+    elBoard.innerHTML = "";
+    const valid = (mode === "normal") ? new Set(getValidMoves(board, turn).map(([r,c]) => `${r},${c}`)) : new Set();
+    for (let r=0;r<8;r++){
+      for (let c=0;c<8;c++){
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        cell.dataset.r = r;
+        cell.dataset.c = c;
+
+        if (mode === "normal" && valid.has(`${r},${c}`)) {
+          cell.classList.add("valid");
+        }
+
+        const v = board[r][c];
+        if (v !== EMPTY) {
+          const stone = document.createElement("div");
+          stone.className = "stone" + (v === WHITE ? " white" : "");
+          cell.appendChild(stone);
+        }
+        elBoard.appendChild(cell);
+      }
+    }
+  }
+
+  function mark(ok) { return ok ? "〇" : "×"; }
+
+})();
+</script>
+</body>
+</html>
